@@ -1,6 +1,6 @@
 ﻿import { WebSocketServer, WebSocket } from 'ws';
 import { SCS76Codec } from '../core/SCS76_Codec';
-import { InputCodec } from '../core/InputCodec';
+import { InputCodec } from '../core/InputCodec'; // Importante!
 
 interface Player {
     id: number;
@@ -13,54 +13,54 @@ interface Player {
 class RealGameServer {
     private players = new Map<number, Player>();
     private nextPlayerId = 1;
-    private snapshotInterval: NodeJS.Timeout;
     private simulationHz = 60;
-    private inputMaxDelta = 10;
 
     constructor(port = 8080) {
         const wss = new WebSocketServer({ port });
-        console.log(`Server running on ws://localhost:${port}`);
+        console.log(`🚀 Aether-Titan Server rodando em ws://localhost:${port}`);
 
         wss.on('connection', (ws) => {
             const id = this.nextPlayerId++;
-            this.players.set(id, { id, ws, x: 0, y: 0, vx: 0, vy: 0, lastInputSeq: 0 });
-            ws.on('message', (data) => this.handleInput(id, data));
+            // Spawn no centro
+            this.players.set(id, { id, ws, x: 400, y: 300, vx: 0, vy: 0, lastInputSeq: 0 });
+            
+            ws.on('message', (data: Buffer) => this.handleInput(id, data));
             ws.on('close', () => this.players.delete(id));
         });
 
-        this.snapshotInterval = setInterval(() => this.broadcastSnapshots(), 1000 / 20);
+        // Loop de Snapshot (20Hz)
+        setInterval(() => this.broadcastSnapshots(), 1000 / 20);
     }
 
     private handleInput(playerId: number, raw: Buffer) {
         const player = this.players.get(playerId);
         if (!player) return;
-        const decoded = InputCodec.decode(new Uint8Array(raw));
-        if (!decoded) return;
-        const { inputSeq, dx, dy } = decoded;
-        if (Math.abs(dx) > this.inputMaxDelta || Math.abs(dy) > this.inputMaxDelta) {
-            console.warn(`Cheat? player ${playerId} dx=${dx} dy=${dy}`);
-            return;
-        }
-        player.vx = dx * 5;
-        player.vy = dy * 5;
+
+        // DECODE BINÁRIO v9.1.0
+        const input = InputCodec.decode(new Uint8Array(raw));
+        if (!input) return;
+
+        const { inputSeq, dx, dy } = input;
+
+        // Simulação simples com trava de velocidade
+        player.vx = dx * 10; 
+        player.vy = dy * 10;
         player.x += player.vx / this.simulationHz;
         player.y += player.vy / this.simulationHz;
         player.lastInputSeq = inputSeq;
     }
 
     private broadcastSnapshots() {
+        const ts = Date.now();
         for (const player of this.players.values()) {
-            const snapshotId = Date.now() & 0xFFFF;
-            const ackInputSeq = player.lastInputSeq;
-            const timestamp = Date.now();
-            const snapshot = SCS76Codec.encode(
+            const snapId = ts & 0xFFFF;
+            const packet = SCS76Codec.encode(
                 player.x, player.y,
-                player.x - player.vx / this.simulationHz,
-                player.y - player.vy / this.simulationHz,
+                player.x - (player.vx/60), player.y - (player.vy/60),
                 player.vx, player.vy,
-                snapshotId, ackInputSeq, timestamp
+                snapId, player.lastInputSeq, ts
             );
-            player.ws.send(snapshot);
+            player.ws.send(packet);
         }
     }
 }
