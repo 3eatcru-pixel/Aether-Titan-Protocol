@@ -155,6 +155,56 @@
             setTimeout(inputLoop, 10);
         }
 
+        // --- AUTO-STRESS TESTER (10 Segundos) ---
+        async function runExtendedAutoTest() {
+            console.log("🔥 INICIANDO TESTE DE ESTRESSE DE 10 SEGUNDOS...");
+            console.log(`📡 Config de Rede: Latência ${CONFIG.latency}ms | Jitter ${CONFIG.jitter}ms | Loss ${CONFIG.loss}%`);
+            
+            // Inicia movimento (Diagonal para baixo e direita)
+            keys.ArrowDown = true;
+            keys.ArrowRight = true;
+            
+            const startTime = performance.now();
+            let lastLogTime = 0;
+
+            const monitor = setInterval(() => {
+                const now = performance.now();
+                const elapsed = now - startTime;
+                
+                // Log detalhado a cada 1 segundo
+                if (elapsed - lastLogTime >= 1000) {
+                    console.log(`⏱️ [${(elapsed/1000).toPrecision(2)}s] Pos: (${playerState.x.toFixed(1)}, ${playerState.y.toFixed(1)}) | AckSeq: ${inputSeq}`);
+                    lastLogTime = elapsed;
+                }
+
+                // Mudança de direção no meio do teste (5s) para testar predição
+                if (elapsed >= 5000 && keys.ArrowDown) {
+                    console.log("🔄 Alternando direção para testar RECONCILIAÇÃO...");
+                    keys.ArrowDown = false;
+                    keys.ArrowUp = true; // Começa a subir
+                }
+
+                // FIM DO TESTE: 10 segundos
+                if (elapsed >= 10000) {
+                    clearInterval(monitor);
+                    keys.ArrowUp = false;
+                    keys.ArrowRight = false;
+                    
+                    console.log("🏁 TESTE COMPLETO.");
+                    console.table({
+                        "Resultado": "Finalizado",
+                        "Duração": "10.000ms",
+                        "Posição Final": `${playerState.x.toFixed(1)}, ${playerState.y.toFixed(1)}`,
+                        "Inputs Enviados": inputSeq,
+                        "Qualidade da Rede": CONFIG.loss > 5 ? "⚠️ Instável" : "✅ Estável"
+                    });
+                }
+            }, 16);
+        }
+
+        // Aguarda 1.5s para garantir que o socket estabilizou
+        setTimeout(runExtendedAutoTest, 1500);
+
         window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
         window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
 
