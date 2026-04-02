@@ -155,33 +155,31 @@
             setTimeout(inputLoop, 10);
         }
 
-        // --- AUTO-STRESS TESTER (10 Segundos) ---
+        // --- AUTO-STRESS TESTER v9.1.0 (Com Geração de Report) ---
         async function runExtendedAutoTest() {
-            console.log("🔥 INICIANDO TESTE DE ESTRESSE DE 10 SEGUNDOS...");
-            console.log(`📡 Config de Rede: Latência ${CONFIG.latency}ms | Jitter ${CONFIG.jitter}ms | Loss ${CONFIG.loss}%`);
+            const logs: Array<{ time: string; posX: string; posY: string; inputSeq: number }> = [];
+            const startTime = performance.now();
             
-            // Inicia movimento (Diagonal para baixo e direita)
             keys.ArrowDown = true;
             keys.ArrowRight = true;
             
-            const startTime = performance.now();
-            let lastLogTime = 0;
-
             const monitor = setInterval(() => {
-                const now = performance.now();
-                const elapsed = now - startTime;
+                const elapsed = performance.now() - startTime;
                 
-                // Log detalhado a cada 1 segundo
-                if (elapsed - lastLogTime >= 1000) {
-                    console.log(`⏱️ [${(elapsed/1000).toPrecision(2)}s] Pos: (${playerState.x.toFixed(1)}, ${playerState.y.toFixed(1)}) | AckSeq: ${inputSeq}`);
-                    lastLogTime = elapsed;
+                // Coleta dados a cada ~100ms para o relatório
+                if (Math.floor(elapsed) % 100 < 16) {
+                    logs.push({
+                        time: (elapsed / 1000).toFixed(2),
+                        posX: playerState.x.toFixed(2),
+                        posY: playerState.y.toFixed(2),
+                        inputSeq: inputSeq
+                    });
                 }
 
                 // Mudança de direção no meio do teste (5s) para testar predição
                 if (elapsed >= 5000 && keys.ArrowDown) {
-                    console.log("🔄 Alternando direção para testar RECONCILIAÇÃO...");
                     keys.ArrowDown = false;
-                    keys.ArrowUp = true; // Começa a subir
+                    keys.ArrowUp = true;
                 }
 
                 // FIM DO TESTE: 10 segundos
@@ -190,16 +188,33 @@
                     keys.ArrowUp = false;
                     keys.ArrowRight = false;
                     
-                    console.log("🏁 TESTE COMPLETO.");
-                    console.table({
-                        "Resultado": "Finalizado",
-                        "Duração": "10.000ms",
-                        "Posição Final": `${playerState.x.toFixed(1)}, ${playerState.y.toFixed(1)}`,
-                        "Inputs Enviados": inputSeq,
-                        "Qualidade da Rede": CONFIG.loss > 5 ? "⚠️ Instável" : "✅ Estável"
-                    });
+                    generateReportFile(logs);
                 }
             }, 16);
+        }
+
+        // --- FUNÇÃO: GERADOR DE ARQUIVO DE RELATÓRIO ---
+        function generateReportFile(data) {
+            const reportHeader = `=== AETHER-TITAN PROTOCOL REPORT ===\\n` +
+                                 `Data: ${new Date().toLocaleString()}\\n` +
+                                 `Config: Latency=${CONFIG.latency}ms, Jitter=${CONFIG.jitter}ms, Loss=${CONFIG.loss}%\\n` +
+                                 `------------------------------------\\n\\n`;
+            
+            const tableHeader = "Tempo(s) | PosX | PosY | Seq\\n";
+            const rows = data.map(d => `${d.time}s | ${d.posX} | ${d.posY} | ${d.inputSeq}`).join('\\n');
+            
+            const finalContent = reportHeader + tableHeader + rows;
+            
+            const blob = new Blob([finalContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `aether_sim_report_${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            console.log("📂 Relatório gerado e baixado com sucesso!");
         }
 
         // Aguarda 1.5s para garantir que o socket estabilizou
